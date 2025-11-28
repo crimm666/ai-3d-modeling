@@ -6,6 +6,7 @@
     <title>AI速模 - 语音驱动3D建模</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
+        /* 样式部分 - 控制网站外观 */
         :root {
             --primary-color: #4a6cf7;
             --secondary-color: #6a7c92;
@@ -427,13 +428,16 @@
     </div>
 
     <script>
-        // 全局变量
-        let isRecording = false;
-        let recognition;
-        let currentModelType = 'object';
-        let generatedModelUrl = null;
+        // JavaScript部分 - 控制网站功能
+        // 这是网站的"大脑"，让按钮可以点击，让语音可以识别
+        
+        // 1. 定义变量 - 就像给东西起名字
+        let isRecording = false;  // 记录是否正在录音
+        let recognition;          // 语音识别对象
+        let currentModelType = 'object';  // 当前选择的模型类型
+        let generatedModelData = null;    // 生成的模型数据
 
-        // DOM元素
+        // 2. 获取页面上的元素 - 找到我们要操作的东西
         const recordBtn = document.getElementById('record-btn');
         const voiceResult = document.getElementById('voice-result');
         const keywordsContainer = document.getElementById('keywords-container');
@@ -445,14 +449,16 @@
         const previewContainer = document.getElementById('preview-container');
         const steps = document.querySelectorAll('.step');
 
-        // 初始化语音识别
+        // 3. 设置语音识别功能
         function initSpeechRecognition() {
+            // 检查浏览器是否支持语音识别
             if ('webkitSpeechRecognition' in window) {
                 recognition = new webkitSpeechRecognition();
-                recognition.continuous = false;
-                recognition.interimResults = false;
-                recognition.lang = 'zh-CN';
+                recognition.continuous = false;      // 不持续录音
+                recognition.interimResults = false;  // 不要中间结果
+                recognition.lang = 'zh-CN';          // 设置中文识别
 
+                // 当开始录音时
                 recognition.onstart = function() {
                     isRecording = true;
                     recordBtn.classList.add('recording');
@@ -460,46 +466,50 @@
                     voiceResult.innerHTML = '<p>正在聆听...请描述您的3D模型</p>';
                 };
 
+                // 当有识别结果时
                 recognition.onresult = function(event) {
                     const transcript = event.results[0][0].transcript;
                     processVoiceResult(transcript);
                 };
 
+                // 当出现错误时
                 recognition.onerror = function(event) {
                     console.error('语音识别错误:', event.error);
                     voiceResult.innerHTML = '<p style="color: var(--danger-color);">语音识别失败，请重试</p>';
                     resetRecordingUI();
                 };
 
+                // 当录音结束时
                 recognition.onend = function() {
                     resetRecordingUI();
                 };
             } else {
+                // 浏览器不支持语音识别
                 voiceResult.innerHTML = '<p style="color: var(--danger-color);">您的浏览器不支持语音识别，请使用Chrome浏览器</p>';
             }
         }
 
+        // 重置录音界面
         function resetRecordingUI() {
             isRecording = false;
             recordBtn.classList.remove('recording');
             recordBtn.innerHTML = '<i class="fas fa-microphone"></i><span>开始录音</span>';
         }
 
-        // 处理语音识别结果
+        // 4. 处理语音识别结果
         function processVoiceResult(text) {
             voiceResult.innerHTML = `<p><strong>识别结果:</strong> ${text}</p>`;
             extractKeywords(text);
             updateStep(2); // 进入第二步
         }
 
-        // 提取关键词（简化版）
+        // 5. 从文本中提取关键词
         function extractKeywords(text) {
-            // 在实际应用中，这里会调用NLP API
-            // 这里使用简单的关键词匹配
-            const shapeKeywords = ['立方体', '球体', '圆柱体', '圆锥体', '长方体'];
-            const colorKeywords = ['红色', '蓝色', '绿色', '黄色', '黑色', '白色'];
-            const sizeKeywords = text.match(/\d+/g) || [];
-            const materialKeywords = ['光滑', '粗糙', '金属', '木质', '塑料'];
+            // 定义可能的关键词列表
+            const shapeKeywords = ['立方体', '球体', '圆柱体', '圆锥体', '长方体', '圆环', '金字塔'];
+            const colorKeywords = ['红色', '蓝色', '绿色', '黄色', '黑色', '白色', '灰色', '透明'];
+            const sizeKeywords = text.match(/\d+/g) || [];  // 提取数字
+            const materialKeywords = ['光滑', '粗糙', '金属', '木质', '塑料', '玻璃', '磨砂'];
             
             const foundKeywords = [];
             
@@ -527,6 +537,7 @@
             displayKeywords(foundKeywords);
         }
 
+        // 显示关键词
         function displayKeywords(keywords) {
             keywordsContainer.innerHTML = '';
             if (keywords.length === 0) {
@@ -542,7 +553,7 @@
             });
         }
 
-        // 更新步骤指示器
+        // 6. 更新步骤指示器
         function updateStep(stepNumber) {
             steps.forEach((step, index) => {
                 if (index + 1 < stepNumber) {
@@ -557,7 +568,7 @@
             });
         }
 
-        // 选择模型类型
+        // 7. 选择模型类型
         optionButtons.forEach(btn => {
             btn.addEventListener('click', () => {
                 optionButtons.forEach(b => b.classList.remove('active'));
@@ -566,7 +577,7 @@
             });
         });
 
-        // 生成3D模型
+        // 8. 生成3D模型
         generateBtn.addEventListener('click', async () => {
             const keywords = Array.from(keywordsContainer.querySelectorAll('.keyword'))
                                 .map(el => el.textContent);
@@ -582,15 +593,14 @@
             updateStep(3); // 进入第三步
             
             try {
-                // 在实际应用中，这里会调用AI生成API
-                // 这里模拟API调用过程
-                await simulateAPICall(keywords);
+                // 根据关键词生成对应的3D模型数据
+                generatedModelData = generateModelData(keywords, currentModelType);
                 
-                // 模拟成功生成模型
-                generatedModelUrl = '#'; // 在实际应用中，这里会是模型文件的URL
+                // 更新预览显示
                 previewContainer.innerHTML = `
-                    <i class="fas fa-check-circle" style="color: var(--success-color);"></i>
-                    <p>3D模型生成成功！</p>
+                    <i class="fas fa-check-circle" style="color: var(--success-color); font-size: 3rem;"></i>
+                    <p style="margin-top: 15px;">3D模型生成成功！</p>
+                    <p><small>模型类型: ${getModelTypeName(currentModelType)}</small></p>
                     <p><small>您现在可以下载模型文件</small></p>
                 `;
                 
@@ -606,35 +616,228 @@
             }
         });
 
-        // 模拟API调用
-        function simulateAPICall(keywords) {
-            return new Promise((resolve) => {
-                setTimeout(() => {
-                    resolve();
-                }, 3000); // 模拟3秒处理时间
-            });
+        // 9. 根据关键词生成模型数据
+        function generateModelData(keywords, type) {
+            // 这里根据关键词确定模型的基本参数
+            const shape = keywords.find(k => 
+                ['立方体', '球体', '圆柱体', '圆锥体', '长方体', '圆环', '金字塔'].includes(k)
+            ) || '立方体';
+            
+            const color = keywords.find(k => 
+                ['红色', '蓝色', '绿色', '黄色', '黑色', '白色', '灰色', '透明'].includes(k)
+            ) || '灰色';
+            
+            const sizeMatch = keywords.find(k => k.includes('cm'));
+            const size = sizeMatch ? parseInt(sizeMatch) : 10;
+            
+            return {
+                shape: shape,
+                color: color,
+                size: size,
+                type: type,
+                vertices: generateVertices(shape, size),
+                faces: generateFaces(shape)
+            };
         }
 
-        // 下载功能
+        // 10. 生成顶点数据
+        function generateVertices(shape, size) {
+            const scale = size / 10;
+            switch(shape) {
+                case '立方体':
+                    return [
+                        [-scale, -scale, -scale], [scale, -scale, -scale],
+                        [scale, scale, -scale], [-scale, scale, -scale],
+                        [-scale, -scale, scale], [scale, -scale, scale],
+                        [scale, scale, scale], [-scale, scale, scale]
+                    ];
+                case '球体':
+                    // 简化的球体顶点
+                    const vertices = [];
+                    const segments = 8;
+                    for (let i = 0; i <= segments; i++) {
+                        const theta = i * Math.PI / segments;
+                        for (let j = 0; j <= segments; j++) {
+                            const phi = j * 2 * Math.PI / segments;
+                            const x = scale * Math.sin(theta) * Math.cos(phi);
+                            const y = scale * Math.sin(theta) * Math.sin(phi);
+                            const z = scale * Math.cos(theta);
+                            vertices.push([x, y, z]);
+                        }
+                    }
+                    return vertices;
+                case '圆柱体':
+                    // 简化的圆柱体顶点
+                    const cylVertices = [];
+                    const cylSegments = 8;
+                    for (let i = 0; i <= cylSegments; i++) {
+                        const theta = i * 2 * Math.PI / cylSegments;
+                        const x = scale * Math.cos(theta);
+                        const y = scale * Math.sin(theta);
+                        cylVertices.push([x, y, -scale]); // 底部
+                        cylVertices.push([x, y, scale]);  // 顶部
+                    }
+                    return cylVertices;
+                default:
+                    return generateVertices('立方体', size);
+            }
+        }
+
+        // 11. 生成面数据
+        function generateFaces(shape) {
+            switch(shape) {
+                case '立方体':
+                    return [
+                        [0, 1, 2, 3], // 后面
+                        [4, 5, 6, 7], // 前面
+                        [0, 4, 7, 3], // 左面
+                        [1, 5, 6, 2], // 右面
+                        [3, 2, 6, 7], // 上面
+                        [0, 1, 5, 4]  // 下面
+                    ];
+                case '球体':
+                    // 简化的球体面
+                    const faces = [];
+                    const segments = 8;
+                    for (let i = 0; i < segments; i++) {
+                        for (let j = 0; j < segments; j++) {
+                            const a = i * (segments + 1) + j;
+                            const b = a + 1;
+                            const c = a + (segments + 1);
+                            const d = c + 1;
+                            faces.push([a, b, d, c]);
+                        }
+                    }
+                    return faces;
+                default:
+                    return generateFaces('立方体');
+            }
+        }
+
+        // 12. 获取模型类型名称
+        function getModelTypeName(type) {
+            const names = {
+                'object': '物体/道具',
+                'character': '角色/生物',
+                'environment': '环境/场景',
+                'architecture': '建筑/结构'
+            };
+            return names[type] || '物体';
+        }
+
+        // 13. 生成OBJ文件内容
+        function generateOBJContent(modelData) {
+            let objContent = `# AI速模生成的3D模型\n`;
+            objContent += `# 形状: ${modelData.shape}\n`;
+            objContent += `# 大小: ${modelData.size}cm\n\n`;
+            
+            // 顶点
+            modelData.vertices.forEach(vertex => {
+                objContent += `v ${vertex[0].toFixed(6)} ${vertex[1].toFixed(6)} ${vertex[2].toFixed(6)}\n`;
+            });
+            
+            objContent += `\n`;
+            
+            // 面
+            modelData.faces.forEach(face => {
+                if (face.length === 3) {
+                    objContent += `f ${face[0] + 1} ${face[1] + 1} ${face[2] + 1}\n`;
+                } else {
+                    objContent += `f ${face[0] + 1} ${face[1] + 1} ${face[2] + 1} ${face[3] + 1}\n`;
+                }
+            });
+            
+            return objContent;
+        }
+
+        // 14. 生成STL文件内容（ASCII格式）
+        function generateSTLContent(modelData) {
+            let stlContent = `solid AI_Generated_Model\n`;
+            
+            modelData.faces.forEach(face => {
+                // 计算法向量（简化）
+                const v1 = modelData.vertices[face[0]];
+                const v2 = modelData.vertices[face[1]];
+                const v3 = modelData.vertices[face[2]];
+                
+                // 计算法向量（叉积）
+                const u = [v2[0] - v1[0], v2[1] - v1[1], v2[2] - v1[2]];
+                const w = [v3[0] - v1[0], v3[1] - v1[1], v3[2] - v1[2]];
+                const normal = [
+                    u[1] * w[2] - u[2] * w[1],
+                    u[2] * w[0] - u[0] * w[2],
+                    u[0] * w[1] - u[1] * w[0]
+                ];
+                
+                // 归一化
+                const length = Math.sqrt(normal[0]**2 + normal[1]**2 + normal[2]**2);
+                if (length > 0) {
+                    normal[0] /= length;
+                    normal[1] /= length;
+                    normal[2] /= length;
+                }
+                
+                stlContent += `  facet normal ${normal[0].toFixed(6)} ${normal[1].toFixed(6)} ${normal[2].toFixed(6)}\n`;
+                stlContent += `    outer loop\n`;
+                
+                // 添加顶点
+                face.forEach(vertexIndex => {
+                    const vertex = modelData.vertices[vertexIndex];
+                    stlContent += `      vertex ${vertex[0].toFixed(6)} ${vertex[1].toFixed(6)} ${vertex[2].toFixed(6)}\n`;
+                });
+                
+                stlContent += `    endloop\n`;
+                stlContent += `  endfacet\n`;
+            });
+            
+            stlContent += `endsolid AI_Generated_Model\n`;
+            return stlContent;
+        }
+
+        // 15. 下载文件函数
+        function downloadFile(content, filename, contentType) {
+            const blob = new Blob([content], { type: contentType });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        // 16. 下载OBJ文件
         downloadObjBtn.addEventListener('click', () => {
-            if (!generatedModelUrl) {
+            if (!generatedModelData) {
                 alert('请先生成3D模型');
                 return;
             }
-            alert('OBJ文件下载功能已触发！在实际应用中，这里会下载真实的OBJ文件');
-            // 在实际应用中，这里会触发文件下载
+            
+            const objContent = generateOBJContent(generatedModelData);
+            const filename = `ai_model_${Date.now()}.obj`;
+            downloadFile(objContent, filename, 'text/plain');
+            
+            // 显示下载成功消息
+            previewContainer.innerHTML += `<p style="color: var(--success-color); margin-top: 10px;">OBJ文件下载成功！</p>`;
         });
 
+        // 17. 下载STL文件
         downloadStlBtn.addEventListener('click', () => {
-            if (!generatedModelUrl) {
+            if (!generatedModelData) {
                 alert('请先生成3D模型');
                 return;
             }
-            alert('STL文件下载功能已触发！在实际应用中，这里会下载真实的STL文件');
-            // 在实际应用中，这里会触发文件下载
+            
+            const stlContent = generateSTLContent(generatedModelData);
+            const filename = `ai_model_${Date.now()}.stl`;
+            downloadFile(stlContent, filename, 'text/plain');
+            
+            // 显示下载成功消息
+            previewContainer.innerHTML += `<p style="color: var(--success-color); margin-top: 10px;">STL文件下载成功！</p>`;
         });
 
-        // 初始化
+        // 18. 初始化录音按钮
         recordBtn.addEventListener('click', () => {
             if (!isRecording) {
                 initSpeechRecognition();
@@ -645,7 +848,7 @@
             }
         });
 
-        // 页面加载完成后的初始化
+        // 19. 页面加载完成后的初始化
         window.addEventListener('load', () => {
             updateStep(1); // 初始状态为第一步
         });
