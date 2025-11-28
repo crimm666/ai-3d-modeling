@@ -1,414 +1,857 @@
-<script>
-    // 全局变量
-    let isRecording = false;
-    let recognition;
-    let currentModelType = 'object';
-    let generatedModelData = null;
-
-    // DOM元素
-    const recordBtn = document.getElementById('record-btn');
-    const voiceResult = document.getElementById('voice-result');
-    const keywordsContainer = document.getElementById('keywords-container');
-    const generateBtn = document.getElementById('generate-btn');
-    const loadingElement = document.getElementById('loading');
-    const optionButtons = document.querySelectorAll('.option-btn');
-    const downloadObjBtn = document.getElementById('download-obj');
-    const downloadStlBtn = document.getElementById('download-stl');
-    const previewContainer = document.getElementById('preview-container');
-    const steps = document.querySelectorAll('.step');
-
-    // 初始化语音识别
-    function initSpeechRecognition() {
-        if ('webkitSpeechRecognition' in window) {
-            recognition = new webkitSpeechRecognition();
-            recognition.continuous = false;
-            recognition.interimResults = false;
-            recognition.lang = 'zh-CN';
-
-            recognition.onstart = function() {
-                isRecording = true;
-                recordBtn.classList.add('recording');
-                recordBtn.innerHTML = '<i class="fas fa-stop"></i><span>停止录音</span>';
-                voiceResult.innerHTML = '<p>正在聆听...请描述您的3D模型</p>';
-            };
-
-            recognition.onresult = function(event) {
-                const transcript = event.results[0][0].transcript;
-                processVoiceResult(transcript);
-            };
-
-            recognition.onerror = function(event) {
-                console.error('语音识别错误:', event.error);
-                voiceResult.innerHTML = '<p style="color: var(--danger-color);">语音识别失败，请重试</p>';
-                resetRecordingUI();
-            };
-
-            recognition.onend = function() {
-                resetRecordingUI();
-            };
-        } else {
-            voiceResult.innerHTML = '<p style="color: var(--danger-color);">您的浏览器不支持语音识别，请使用Chrome浏览器</p>';
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI速模 - 语音驱动3D建模</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        /* 样式部分 - 控制网站外观 */
+        :root {
+            --primary-color: #4a6cf7;
+            --secondary-color: #6a7c92;
+            --dark-color: #1d2144;
+            --light-color: #f5f8ff;
+            --success-color: #2ecc71;
+            --warning-color: #f39c12;
+            --danger-color: #e74c3c;
         }
-    }
 
-    function resetRecordingUI() {
-        isRecording = false;
-        recordBtn.classList.remove('recording');
-        recordBtn.innerHTML = '<i class="fas fa-microphone"></i><span>开始录音</span>';
-    }
-
-    // 处理语音识别结果
-    function processVoiceResult(text) {
-        voiceResult.innerHTML = `<p><strong>识别结果:</strong> ${text}</p>`;
-        extractKeywords(text);
-        updateStep(2); // 进入第二步
-    }
-
-    // 提取关键词（简化版）
-    function extractKeywords(text) {
-        const shapeKeywords = ['立方体', '球体', '圆柱体', '圆锥体', '长方体', '圆环', '金字塔'];
-        const colorKeywords = ['红色', '蓝色', '绿色', '黄色', '黑色', '白色', '灰色', '透明'];
-        const sizeKeywords = text.match(/\d+/g) || [];
-        const materialKeywords = ['光滑', '粗糙', '金属', '木质', '塑料', '玻璃', '磨砂'];
-        
-        const foundKeywords = [];
-        
-        // 检查形状关键词
-        shapeKeywords.forEach(keyword => {
-            if (text.includes(keyword)) foundKeywords.push(keyword);
-        });
-        
-        // 检查颜色关键词
-        colorKeywords.forEach(keyword => {
-            if (text.includes(keyword)) foundKeywords.push(keyword);
-        });
-        
-        // 检查尺寸
-        if (sizeKeywords.length > 0) {
-            foundKeywords.push(`${sizeKeywords[0]}cm`);
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         }
-        
-        // 检查材质
-        materialKeywords.forEach(keyword => {
-            if (text.includes(keyword)) foundKeywords.push(keyword);
-        });
-        
-        // 显示关键词
-        displayKeywords(foundKeywords);
-    }
 
-    function displayKeywords(keywords) {
-        keywordsContainer.innerHTML = '';
-        if (keywords.length === 0) {
-            keywordsContainer.innerHTML = '<p>未识别到关键词，请尝试更具体的描述</p>';
-            return;
+        body {
+            line-height: 1.6;
+            color: var(--secondary-color);
+            background: linear-gradient(135deg, #f5f7ff 0%, #e6ecff 100%);
+            min-height: 100vh;
+            padding: 20px;
         }
-        
-        keywords.forEach(keyword => {
-            const keywordElement = document.createElement('div');
-            keywordElement.className = 'keyword';
-            keywordElement.textContent = keyword;
-            keywordsContainer.appendChild(keywordElement);
-        });
-    }
 
-    // 更新步骤指示器
-    function updateStep(stepNumber) {
-        steps.forEach((step, index) => {
-            if (index + 1 < stepNumber) {
-                step.classList.add('completed');
-                step.classList.remove('active');
-            } else if (index + 1 === stepNumber) {
-                step.classList.add('active');
-                step.classList.remove('completed');
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            padding: 20px 0;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            color: var(--dark-color);
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            font-size: 1.2rem;
+            color: var(--secondary-color);
+            max-width: 600px;
+            margin: 0 auto 30px;
+        }
+
+        .app-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            margin-bottom: 40px;
+        }
+
+        @media (max-width: 768px) {
+            .app-container {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .card {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+            padding: 25px;
+            transition: transform 0.3s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+        }
+
+        .card h2 {
+            color: var(--dark-color);
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid var(--light-color);
+        }
+
+        .voice-controls {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .record-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            padding: 15px 25px;
+            background: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 50px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .record-btn:hover {
+            background: #3a5ce5;
+            transform: scale(1.05);
+        }
+
+        .record-btn.recording {
+            background: var(--danger-color);
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(231, 76, 60, 0.7); }
+            70% { box-shadow: 0 0 0 15px rgba(231, 76, 60, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(231, 76, 60, 0); }
+        }
+
+        .voice-result {
+            background: var(--light-color);
+            border-radius: 8px;
+            padding: 15px;
+            min-height: 100px;
+            margin-top: 15px;
+        }
+
+        .keywords {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .keyword {
+            background: var(--primary-color);
+            color: white;
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 0.9rem;
+        }
+
+        .preview-container {
+            position: relative;
+            height: 300px;
+            border-radius: 8px;
+            overflow: hidden;
+            background: #1a1a2e;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            flex-direction: column;
+        }
+
+        .preview-container i {
+            font-size: 3rem;
+            margin-bottom: 15px;
+        }
+
+        .options {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .option-btn {
+            padding: 12px;
+            background: var(--light-color);
+            border: 2px solid transparent;
+            border-radius: 8px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .option-btn:hover {
+            border-color: var(--primary-color);
+            background: white;
+        }
+
+        .option-btn.active {
+            border-color: var(--primary-color);
+            background: rgba(74, 108, 247, 0.1);
+        }
+
+        .generate-btn {
+            width: 100%;
+            padding: 15px;
+            background: var(--success-color);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+            margin-top: 20px;
+            transition: background 0.3s;
+        }
+
+        .generate-btn:hover {
+            background: #27ae60;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+        }
+
+        .loading.active {
+            display: block;
+        }
+
+        .spinner {
+            border: 5px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top: 5px solid var(--primary-color);
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .actions {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin-top: 30px;
+        }
+
+        .action-btn {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 12px 25px;
+            background: white;
+            border: 2px solid var(--primary-color);
+            border-radius: 8px;
+            color: var(--primary-color);
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .action-btn:hover {
+            background: var(--primary-color);
+            color: white;
+        }
+
+        footer {
+            text-align: center;
+            padding: 30px 0;
+            color: var(--secondary-color);
+            font-size: 0.9rem;
+        }
+
+        .step-indicator {
+            display: flex;
+            justify-content: space-between;
+            margin: 20px 0;
+            position: relative;
+        }
+
+        .step-indicator::before {
+            content: '';
+            position: absolute;
+            top: 15px;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: #e0e0e0;
+            z-index: 1;
+        }
+
+        .step {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            position: relative;
+            z-index: 2;
+        }
+
+        .step-circle {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            background: #e0e0e0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: white;
+        }
+
+        .step.active .step-circle {
+            background: var(--primary-color);
+        }
+
+        .step.completed .step-circle {
+            background: var(--success-color);
+        }
+
+        .step-text {
+            font-size: 0.8rem;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>AI速模</h1>
+            <p class="subtitle">语音驱动的一站式3D建模工具 - 零基础也能用</p>
+        </header>
+
+        <div class="step-indicator">
+            <div class="step active" id="step1">
+                <div class="step-circle">1</div>
+                <div class="step-text">语音输入</div>
+            </div>
+            <div class="step" id="step2">
+                <div class="step-circle">2</div>
+                <div class="step-text">AI处理</div>
+            </div>
+            <div class="step" id="step3">
+                <div class="step-circle">3</div>
+                <div class="step-text">生成模型</div>
+            </div>
+            <div class="step" id="step4">
+                <div class="step-circle">4</div>
+                <div class="step-text">下载文件</div>
+            </div>
+        </div>
+
+        <div class="app-container">
+            <div class="card">
+                <h2>语音输入</h2>
+                <div class="voice-controls">
+                    <button id="record-btn" class="record-btn">
+                        <i class="fas fa-microphone"></i>
+                        <span>开始录音</span>
+                    </button>
+                    <div class="voice-result" id="voice-result">
+                        <p>点击上方按钮，用语音描述您想要的3D模型</p>
+                        <p><small>例如："创建一个红色的立方体，边长20厘米，表面光滑"</small></p>
+                    </div>
+                    <div class="keywords" id="keywords-container">
+                        <!-- 关键词将在这里显示 -->
+                    </div>
+                </div>
+
+                <h2 style="margin-top: 30px;">模型类型</h2>
+                <div class="options">
+                    <div class="option-btn active" data-type="object">
+                        <i class="fas fa-cube"></i><br>物体/道具
+                    </div>
+                    <div class="option-btn" data-type="character">
+                        <i class="fas fa-user"></i><br>角色/生物
+                    </div>
+                    <div class="option-btn" data-type="environment">
+                        <i class="fas fa-tree"></i><br>环境/场景
+                    </div>
+                    <div class="option-btn" data-type="architecture">
+                        <i class="fas fa-building"></i><br>建筑/结构
+                    </div>
+                </div>
+
+                <button id="generate-btn" class="generate-btn">
+                    <i class="fas fa-cube"></i>
+                    生成3D模型
+                </button>
+
+                <div class="loading" id="loading">
+                    <div class="spinner"></div>
+                    <p>AI正在生成您的3D模型，请稍候...</p>
+                    <p><small>这个过程可能需要1-2分钟</small></p>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>3D模型预览</h2>
+                <div class="preview-container" id="preview-container">
+                    <i class="fas fa-cube"></i>
+                    <p>生成的3D模型将在这里显示</p>
+                </div>
+
+                <div class="actions">
+                    <button class="action-btn" id="download-obj">
+                        <i class="fas fa-download"></i>
+                        下载OBJ文件
+                    </button>
+                    <button class="action-btn" id="download-stl">
+                        <i class="fas fa-download"></i>
+                        下载STL文件
+                    </button>
+                </div>
+
+                <div style="margin-top: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px;">
+                    <h3><i class="fas fa-lightbulb"></i> 使用技巧</h3>
+                    <ul style="margin-left: 20px; margin-top: 10px;">
+                        <li>描述越具体，模型越精确</li>
+                        <li>包含尺寸、颜色、材质等信息</li>
+                        <li>从简单形状开始尝试</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <footer>
+            <p>AI速模 - 语音驱动3D建模系统 &copy; 2023 | 专为零基础用户设计</p>
+        </footer>
+    </div>
+
+    <script>
+        // JavaScript部分 - 控制网站功能
+        // 这是网站的"大脑"，让按钮可以点击，让语音可以识别
+        
+        // 1. 定义变量 - 就像给东西起名字
+        let isRecording = false;  // 记录是否正在录音
+        let recognition;          // 语音识别对象
+        let currentModelType = 'object';  // 当前选择的模型类型
+        let generatedModelData = null;    // 生成的模型数据
+
+        // 2. 获取页面上的元素 - 找到我们要操作的东西
+        const recordBtn = document.getElementById('record-btn');
+        const voiceResult = document.getElementById('voice-result');
+        const keywordsContainer = document.getElementById('keywords-container');
+        const generateBtn = document.getElementById('generate-btn');
+        const loadingElement = document.getElementById('loading');
+        const optionButtons = document.querySelectorAll('.option-btn');
+        const downloadObjBtn = document.getElementById('download-obj');
+        const downloadStlBtn = document.getElementById('download-stl');
+        const previewContainer = document.getElementById('preview-container');
+        const steps = document.querySelectorAll('.step');
+
+        // 3. 设置语音识别功能
+        function initSpeechRecognition() {
+            // 检查浏览器是否支持语音识别
+            if ('webkitSpeechRecognition' in window) {
+                recognition = new webkitSpeechRecognition();
+                recognition.continuous = false;      // 不持续录音
+                recognition.interimResults = false;  // 不要中间结果
+                recognition.lang = 'zh-CN';          // 设置中文识别
+
+                // 当开始录音时
+                recognition.onstart = function() {
+                    isRecording = true;
+                    recordBtn.classList.add('recording');
+                    recordBtn.innerHTML = '<i class="fas fa-stop"></i><span>停止录音</span>';
+                    voiceResult.innerHTML = '<p>正在聆听...请描述您的3D模型</p>';
+                };
+
+                // 当有识别结果时
+                recognition.onresult = function(event) {
+                    const transcript = event.results[0][0].transcript;
+                    processVoiceResult(transcript);
+                };
+
+                // 当出现错误时
+                recognition.onerror = function(event) {
+                    console.error('语音识别错误:', event.error);
+                    voiceResult.innerHTML = '<p style="color: var(--danger-color);">语音识别失败，请重试</p>';
+                    resetRecordingUI();
+                };
+
+                // 当录音结束时
+                recognition.onend = function() {
+                    resetRecordingUI();
+                };
             } else {
-                step.classList.remove('active', 'completed');
+                // 浏览器不支持语音识别
+                voiceResult.innerHTML = '<p style="color: var(--danger-color);">您的浏览器不支持语音识别，请使用Chrome浏览器</p>';
             }
-        });
-    }
-
-    // 选择模型类型
-    optionButtons.forEach(btn => {
-        btn.addEventListener('click', () => {
-            optionButtons.forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            currentModelType = btn.getAttribute('data-type');
-        });
-    });
-
-    // 生成3D模型
-    generateBtn.addEventListener('click', async () => {
-        const keywords = Array.from(keywordsContainer.querySelectorAll('.keyword'))
-                            .map(el => el.textContent);
-        
-        if (keywords.length === 0) {
-            voiceResult.innerHTML += '<p style="color: var(--danger-color);">请先通过语音描述您的模型</p>';
-            return;
         }
-        
-        // 显示加载状态
-        loadingElement.classList.add('active');
-        generateBtn.disabled = true;
-        updateStep(3); // 进入第三步
-        
-        try {
-            // 根据关键词生成对应的3D模型数据
-            generatedModelData = generateModelData(keywords, currentModelType);
-            
-            // 更新预览显示
-            previewContainer.innerHTML = `
-                <i class="fas fa-check-circle" style="color: var(--success-color); font-size: 3rem;"></i>
-                <p style="margin-top: 15px;">3D模型生成成功！</p>
-                <p><small>模型类型: ${getModelTypeName(currentModelType)}</small></p>
-                <p><small>您现在可以下载模型文件</small></p>
-            `;
-            
-            voiceResult.innerHTML += '<p style="color: var(--success-color);">3D模型生成成功！</p>';
-            updateStep(4); // 进入第四步
-            
-        } catch (error) {
-            voiceResult.innerHTML += '<p style="color: var(--danger-color);">生成失败，请重试</p>';
-            updateStep(2); // 回到第二步
-        } finally {
-            loadingElement.classList.remove('active');
-            generateBtn.disabled = false;
+
+        // 重置录音界面
+        function resetRecordingUI() {
+            isRecording = false;
+            recordBtn.classList.remove('recording');
+            recordBtn.innerHTML = '<i class="fas fa-microphone"></i><span>开始录音</span>';
         }
-    });
 
-    // 根据关键词生成模型数据
-    function generateModelData(keywords, type) {
-        // 这里根据关键词确定模型的基本参数
-        const shape = keywords.find(k => 
-            ['立方体', '球体', '圆柱体', '圆锥体', '长方体', '圆环', '金字塔'].includes(k)
-        ) || '立方体';
-        
-        const color = keywords.find(k => 
-            ['红色', '蓝色', '绿色', '黄色', '黑色', '白色', '灰色', '透明'].includes(k)
-        ) || '灰色';
-        
-        const sizeMatch = keywords.find(k => k.includes('cm'));
-        const size = sizeMatch ? parseInt(sizeMatch) : 10;
-        
-        return {
-            shape: shape,
-            color: color,
-            size: size,
-            type: type,
-            vertices: generateVertices(shape, size),
-            faces: generateFaces(shape)
-        };
-    }
-
-    // 生成顶点数据
-    function generateVertices(shape, size) {
-        const scale = size / 10;
-        switch(shape) {
-            case '立方体':
-                return [
-                    [-scale, -scale, -scale], [scale, -scale, -scale],
-                    [scale, scale, -scale], [-scale, scale, -scale],
-                    [-scale, -scale, scale], [scale, -scale, scale],
-                    [scale, scale, scale], [-scale, scale, scale]
-                ];
-            case '球体':
-                // 简化的球体顶点
-                const vertices = [];
-                const segments = 8;
-                for (let i = 0; i <= segments; i++) {
-                    const theta = i * Math.PI / segments;
-                    for (let j = 0; j <= segments; j++) {
-                        const phi = j * 2 * Math.PI / segments;
-                        const x = scale * Math.sin(theta) * Math.cos(phi);
-                        const y = scale * Math.sin(theta) * Math.sin(phi);
-                        const z = scale * Math.cos(theta);
-                        vertices.push([x, y, z]);
-                    }
-                }
-                return vertices;
-            case '圆柱体':
-                // 简化的圆柱体顶点
-                const cylVertices = [];
-                const cylSegments = 8;
-                for (let i = 0; i <= cylSegments; i++) {
-                    const theta = i * 2 * Math.PI / cylSegments;
-                    const x = scale * Math.cos(theta);
-                    const y = scale * Math.sin(theta);
-                    cylVertices.push([x, y, -scale]); // 底部
-                    cylVertices.push([x, y, scale]);  // 顶部
-                }
-                return cylVertices;
-            default:
-                return generateVertices('立方体', size);
+        // 4. 处理语音识别结果
+        function processVoiceResult(text) {
+            voiceResult.innerHTML = `<p><strong>识别结果:</strong> ${text}</p>`;
+            extractKeywords(text);
+            updateStep(2); // 进入第二步
         }
-    }
 
-    // 生成面数据
-    function generateFaces(shape) {
-        switch(shape) {
-            case '立方体':
-                return [
-                    [0, 1, 2, 3], // 后面
-                    [4, 5, 6, 7], // 前面
-                    [0, 4, 7, 3], // 左面
-                    [1, 5, 6, 2], // 右面
-                    [3, 2, 6, 7], // 上面
-                    [0, 1, 5, 4]  // 下面
-                ];
-            case '球体':
-                // 简化的球体面
-                const faces = [];
-                const segments = 8;
-                for (let i = 0; i < segments; i++) {
-                    for (let j = 0; j < segments; j++) {
-                        const a = i * (segments + 1) + j;
-                        const b = a + 1;
-                        const c = a + (segments + 1);
-                        const d = c + 1;
-                        faces.push([a, b, d, c]);
-                    }
-                }
-                return faces;
-            default:
-                return generateFaces('立方体');
-        }
-    }
-
-    // 获取模型类型名称
-    function getModelTypeName(type) {
-        const names = {
-            'object': '物体/道具',
-            'character': '角色/生物',
-            'environment': '环境/场景',
-            'architecture': '建筑/结构'
-        };
-        return names[type] || '物体';
-    }
-
-    // 生成OBJ文件内容
-    function generateOBJContent(modelData) {
-        let objContent = `# AI速模生成的3D模型\n`;
-        objContent += `# 形状: ${modelData.shape}\n`;
-        objContent += `# 大小: ${modelData.size}cm\n\n`;
-        
-        // 顶点
-        modelData.vertices.forEach(vertex => {
-            objContent += `v ${vertex[0].toFixed(6)} ${vertex[1].toFixed(6)} ${vertex[2].toFixed(6)}\n`;
-        });
-        
-        objContent += `\n`;
-        
-        // 面
-        modelData.faces.forEach(face => {
-            if (face.length === 3) {
-                objContent += `f ${face[0] + 1} ${face[1] + 1} ${face[2] + 1}\n`;
-            } else {
-                objContent += `f ${face[0] + 1} ${face[1] + 1} ${face[2] + 1} ${face[3] + 1}\n`;
-            }
-        });
-        
-        return objContent;
-    }
-
-    // 生成STL文件内容（ASCII格式）
-    function generateSTLContent(modelData) {
-        let stlContent = `solid AI_Generated_Model\n`;
-        
-        modelData.faces.forEach(face => {
-            // 计算法向量（简化）
-            const v1 = modelData.vertices[face[0]];
-            const v2 = modelData.vertices[face[1]];
-            const v3 = modelData.vertices[face[2]];
+        // 5. 从文本中提取关键词
+        function extractKeywords(text) {
+            // 定义可能的关键词列表
+            const shapeKeywords = ['立方体', '球体', '圆柱体', '圆锥体', '长方体', '圆环', '金字塔'];
+            const colorKeywords = ['红色', '蓝色', '绿色', '黄色', '黑色', '白色', '灰色', '透明'];
+            const sizeKeywords = text.match(/\d+/g) || [];  // 提取数字
+            const materialKeywords = ['光滑', '粗糙', '金属', '木质', '塑料', '玻璃', '磨砂'];
             
-            // 计算法向量（叉积）
-            const u = [v2[0] - v1[0], v2[1] - v1[1], v2[2] - v1[2]];
-            const w = [v3[0] - v1[0], v3[1] - v1[1], v3[2] - v1[2]];
-            const normal = [
-                u[1] * w[2] - u[2] * w[1],
-                u[2] * w[0] - u[0] * w[2],
-                u[0] * w[1] - u[1] * w[0]
-            ];
+            const foundKeywords = [];
             
-            // 归一化
-            const length = Math.sqrt(normal[0]**2 + normal[1]**2 + normal[2]**2);
-            if (length > 0) {
-                normal[0] /= length;
-                normal[1] /= length;
-                normal[2] /= length;
-            }
-            
-            stlContent += `  facet normal ${normal[0].toFixed(6)} ${normal[1].toFixed(6)} ${normal[2].toFixed(6)}\n`;
-            stlContent += `    outer loop\n`;
-            
-            // 添加顶点
-            face.forEach(vertexIndex => {
-                const vertex = modelData.vertices[vertexIndex];
-                stlContent += `      vertex ${vertex[0].toFixed(6)} ${vertex[1].toFixed(6)} ${vertex[2].toFixed(6)}\n`;
+            // 检查形状关键词
+            shapeKeywords.forEach(keyword => {
+                if (text.includes(keyword)) foundKeywords.push(keyword);
             });
             
-            stlContent += `    endloop\n`;
-            stlContent += `  endfacet\n`;
+            // 检查颜色关键词
+            colorKeywords.forEach(keyword => {
+                if (text.includes(keyword)) foundKeywords.push(keyword);
+            });
+            
+            // 检查尺寸
+            if (sizeKeywords.length > 0) {
+                foundKeywords.push(`${sizeKeywords[0]}cm`);
+            }
+            
+            // 检查材质
+            materialKeywords.forEach(keyword => {
+                if (text.includes(keyword)) foundKeywords.push(keyword);
+            });
+            
+            // 显示关键词
+            displayKeywords(foundKeywords);
+        }
+
+        // 显示关键词
+        function displayKeywords(keywords) {
+            keywordsContainer.innerHTML = '';
+            if (keywords.length === 0) {
+                keywordsContainer.innerHTML = '<p>未识别到关键词，请尝试更具体的描述</p>';
+                return;
+            }
+            
+            keywords.forEach(keyword => {
+                const keywordElement = document.createElement('div');
+                keywordElement.className = 'keyword';
+                keywordElement.textContent = keyword;
+                keywordsContainer.appendChild(keywordElement);
+            });
+        }
+
+        // 6. 更新步骤指示器
+        function updateStep(stepNumber) {
+            steps.forEach((step, index) => {
+                if (index + 1 < stepNumber) {
+                    step.classList.add('completed');
+                    step.classList.remove('active');
+                } else if (index + 1 === stepNumber) {
+                    step.classList.add('active');
+                    step.classList.remove('completed');
+                } else {
+                    step.classList.remove('active', 'completed');
+                }
+            });
+        }
+
+        // 7. 选择模型类型
+        optionButtons.forEach(btn => {
+            btn.addEventListener('click', () => {
+                optionButtons.forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                currentModelType = btn.getAttribute('data-type');
+            });
         });
-        
-        stlContent += `endsolid AI_Generated_Model\n`;
-        return stlContent;
-    }
 
-    // 下载文件函数
-    function downloadFile(content, filename, contentType) {
-        const blob = new Blob([content], { type: contentType });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = filename;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-    }
+        // 8. 生成3D模型
+        generateBtn.addEventListener('click', async () => {
+            const keywords = Array.from(keywordsContainer.querySelectorAll('.keyword'))
+                                .map(el => el.textContent);
+            
+            if (keywords.length === 0) {
+                voiceResult.innerHTML += '<p style="color: var(--danger-color);">请先通过语音描述您的模型</p>';
+                return;
+            }
+            
+            // 显示加载状态
+            loadingElement.classList.add('active');
+            generateBtn.disabled = true;
+            updateStep(3); // 进入第三步
+            
+            try {
+                // 根据关键词生成对应的3D模型数据
+                generatedModelData = generateModelData(keywords, currentModelType);
+                
+                // 更新预览显示
+                previewContainer.innerHTML = `
+                    <i class="fas fa-check-circle" style="color: var(--success-color); font-size: 3rem;"></i>
+                    <p style="margin-top: 15px;">3D模型生成成功！</p>
+                    <p><small>模型类型: ${getModelTypeName(currentModelType)}</small></p>
+                    <p><small>您现在可以下载模型文件</small></p>
+                `;
+                
+                voiceResult.innerHTML += '<p style="color: var(--success-color);">3D模型生成成功！</p>';
+                updateStep(4); // 进入第四步
+                
+            } catch (error) {
+                voiceResult.innerHTML += '<p style="color: var(--danger-color);">生成失败，请重试</p>';
+                updateStep(2); // 回到第二步
+            } finally {
+                loadingElement.classList.remove('active');
+                generateBtn.disabled = false;
+            }
+        });
 
-    // 下载OBJ文件
-    downloadObjBtn.addEventListener('click', () => {
-        if (!generatedModelData) {
-            alert('请先生成3D模型');
-            return;
+        // 9. 根据关键词生成模型数据
+        function generateModelData(keywords, type) {
+            // 这里根据关键词确定模型的基本参数
+            const shape = keywords.find(k => 
+                ['立方体', '球体', '圆柱体', '圆锥体', '长方体', '圆环', '金字塔'].includes(k)
+            ) || '立方体';
+            
+            const color = keywords.find(k => 
+                ['红色', '蓝色', '绿色', '黄色', '黑色', '白色', '灰色', '透明'].includes(k)
+            ) || '灰色';
+            
+            const sizeMatch = keywords.find(k => k.includes('cm'));
+            const size = sizeMatch ? parseInt(sizeMatch) : 10;
+            
+            return {
+                shape: shape,
+                color: color,
+                size: size,
+                type: type,
+                vertices: generateVertices(shape, size),
+                faces: generateFaces(shape)
+            };
         }
-        
-        const objContent = generateOBJContent(generatedModelData);
-        const filename = `ai_model_${Date.now()}.obj`;
-        downloadFile(objContent, filename, 'text/plain');
-        
-        // 显示下载成功消息
-        previewContainer.innerHTML += `<p style="color: var(--success-color); margin-top: 10px;">OBJ文件下载成功！</p>`;
-    });
 
-    // 下载STL文件
-    downloadStlBtn.addEventListener('click', () => {
-        if (!generatedModelData) {
-            alert('请先生成3D模型');
-            return;
+        // 10. 生成顶点数据
+        function generateVertices(shape, size) {
+            const scale = size / 10;
+            switch(shape) {
+                case '立方体':
+                    return [
+                        [-scale, -scale, -scale], [scale, -scale, -scale],
+                        [scale, scale, -scale], [-scale, scale, -scale],
+                        [-scale, -scale, scale], [scale, -scale, scale],
+                        [scale, scale, scale], [-scale, scale, scale]
+                    ];
+                case '球体':
+                    // 简化的球体顶点
+                    const vertices = [];
+                    const segments = 8;
+                    for (let i = 0; i <= segments; i++) {
+                        const theta = i * Math.PI / segments;
+                        for (let j = 0; j <= segments; j++) {
+                            const phi = j * 2 * Math.PI / segments;
+                            const x = scale * Math.sin(theta) * Math.cos(phi);
+                            const y = scale * Math.sin(theta) * Math.sin(phi);
+                            const z = scale * Math.cos(theta);
+                            vertices.push([x, y, z]);
+                        }
+                    }
+                    return vertices;
+                case '圆柱体':
+                    // 简化的圆柱体顶点
+                    const cylVertices = [];
+                    const cylSegments = 8;
+                    for (let i = 0; i <= cylSegments; i++) {
+                        const theta = i * 2 * Math.PI / cylSegments;
+                        const x = scale * Math.cos(theta);
+                        const y = scale * Math.sin(theta);
+                        cylVertices.push([x, y, -scale]); // 底部
+                        cylVertices.push([x, y, scale]);  // 顶部
+                    }
+                    return cylVertices;
+                default:
+                    return generateVertices('立方体', size);
+            }
         }
-        
-        const stlContent = generateSTLContent(generatedModelData);
-        const filename = `ai_model_${Date.now()}.stl`;
-        downloadFile(stlContent, filename, 'text/plain');
-        
-        // 显示下载成功消息
-        previewContainer.innerHTML += `<p style="color: var(--success-color); margin-top: 10px;">STL文件下载成功！</p>`;
-    });
 
-    // 初始化
-    recordBtn.addEventListener('click', () => {
-        if (!isRecording) {
-            initSpeechRecognition();
-            recognition.start();
-            updateStep(1); // 进入第一步
-        } else {
-            recognition.stop();
+        // 11. 生成面数据
+        function generateFaces(shape) {
+            switch(shape) {
+                case '立方体':
+                    return [
+                        [0, 1, 2, 3], // 后面
+                        [4, 5, 6, 7], // 前面
+                        [0, 4, 7, 3], // 左面
+                        [1, 5, 6, 2], // 右面
+                        [3, 2, 6, 7], // 上面
+                        [0, 1, 5, 4]  // 下面
+                    ];
+                case '球体':
+                    // 简化的球体面
+                    const faces = [];
+                    const segments = 8;
+                    for (let i = 0; i < segments; i++) {
+                        for (let j = 0; j < segments; j++) {
+                            const a = i * (segments + 1) + j;
+                            const b = a + 1;
+                            const c = a + (segments + 1);
+                            const d = c + 1;
+                            faces.push([a, b, d, c]);
+                        }
+                    }
+                    return faces;
+                default:
+                    return generateFaces('立方体');
+            }
         }
-    });
 
-    // 页面加载完成后的初始化
-    window.addEventListener('load', () => {
-        updateStep(1); // 初始状态为第一步
-    });
-</script>
+        // 12. 获取模型类型名称
+        function getModelTypeName(type) {
+            const names = {
+                'object': '物体/道具',
+                'character': '角色/生物',
+                'environment': '环境/场景',
+                'architecture': '建筑/结构'
+            };
+            return names[type] || '物体';
+        }
+
+        // 13. 生成OBJ文件内容
+        function generateOBJContent(modelData) {
+            let objContent = `# AI速模生成的3D模型\n`;
+            objContent += `# 形状: ${modelData.shape}\n`;
+            objContent += `# 大小: ${modelData.size}cm\n\n`;
+            
+            // 顶点
+            modelData.vertices.forEach(vertex => {
+                objContent += `v ${vertex[0].toFixed(6)} ${vertex[1].toFixed(6)} ${vertex[2].toFixed(6)}\n`;
+            });
+            
+            objContent += `\n`;
+            
+            // 面
+            modelData.faces.forEach(face => {
+                if (face.length === 3) {
+                    objContent += `f ${face[0] + 1} ${face[1] + 1} ${face[2] + 1}\n`;
+                } else {
+                    objContent += `f ${face[0] + 1} ${face[1] + 1} ${face[2] + 1} ${face[3] + 1}\n`;
+                }
+            });
+            
+            return objContent;
+        }
+
+        // 14. 生成STL文件内容（ASCII格式）
+        function generateSTLContent(modelData) {
+            let stlContent = `solid AI_Generated_Model\n`;
+            
+            modelData.faces.forEach(face => {
+                // 计算法向量（简化）
+                const v1 = modelData.vertices[face[0]];
+                const v2 = modelData.vertices[face[1]];
+                const v3 = modelData.vertices[face[2]];
+                
+                // 计算法向量（叉积）
+                const u = [v2[0] - v1[0], v2[1] - v1[1], v2[2] - v1[2]];
+                const w = [v3[0] - v1[0], v3[1] - v1[1], v3[2] - v1[2]];
+                const normal = [
+                    u[1] * w[2] - u[2] * w[1],
+                    u[2] * w[0] - u[0] * w[2],
+                    u[0] * w[1] - u[1] * w[0]
+                ];
+                
+                // 归一化
+                const length = Math.sqrt(normal[0]**2 + normal[1]**2 + normal[2]**2);
+                if (length > 0) {
+                    normal[0] /= length;
+                    normal[1] /= length;
+                    normal[2] /= length;
+                }
+                
+                stlContent += `  facet normal ${normal[0].toFixed(6)} ${normal[1].toFixed(6)} ${normal[2].toFixed(6)}\n`;
+                stlContent += `    outer loop\n`;
+                
+                // 添加顶点
+                face.forEach(vertexIndex => {
+                    const vertex = modelData.vertices[vertexIndex];
+                    stlContent += `      vertex ${vertex[0].toFixed(6)} ${vertex[1].toFixed(6)} ${vertex[2].toFixed(6)}\n`;
+                });
+                
+                stlContent += `    endloop\n`;
+                stlContent += `  endfacet\n`;
+            });
+            
+            stlContent += `endsolid AI_Generated_Model\n`;
+            return stlContent;
+        }
+
+        // 15. 下载文件函数
+        function downloadFile(content, filename, contentType) {
+            const blob = new Blob([content], { type: contentType });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        // 16. 下载OBJ文件
+        downloadObjBtn.addEventListener('click', () => {
+            if (!generatedModelData) {
+                alert('请先生成3D模型');
+                return;
+            }
+            
+            const objContent = generateOBJContent(generatedModelData);
+            const filename = `ai_model_${Date.now()}.obj`;
+            downloadFile(objContent, filename, 'text/plain');
+            
+            // 显示下载成功消息
+            previewContainer.innerHTML += `<p style="color: var(--success-color); margin-top: 10px;">OBJ文件下载成功！</p>`;
+        });
+
+        // 17. 下载STL文件
+        downloadStlBtn.addEventListener('click', () => {
+            if (!generatedModelData) {
+                alert('请先生成3D模型');
+                return;
+            }
+            
+            const stlContent = generateSTLContent(generatedModelData);
+            const filename = `ai_model_${Date.now()}.stl`;
+            downloadFile(stlContent, filename, 'text/plain');
+            
+            // 显示下载成功消息
+            previewContainer.innerHTML += `<p style="color: var(--success-color); margin-top: 10px;">STL文件下载成功！</p>`;
+        });
+
+        // 18. 初始化录音按钮
+        recordBtn.addEventListener('click', () => {
+            if (!isRecording) {
+                initSpeechRecognition();
+                recognition.start();
+                updateStep(1); // 进入第一步
+            } else {
+                recognition.stop();
+            }
+        });
+
+        // 19. 页面加载完成后的初始化
+        window.addEventListener('load', () => {
+            updateStep(1); // 初始状态为第一步
+        });
+    </script>
+</body>
+</html>
